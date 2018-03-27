@@ -1,0 +1,144 @@
+library(plotly)
+library(ggplot2)
+library(dplyr)
+library(magrittr)
+
+summary(movie)
+table(movie$clean_test)
+str(movie)
+
+# Data transforming  
+movie$domgross <- as.integer(movie$domgross)
+movie$intgross <- as.integer(movie$intgross)
+movie$domgross_2013. <- as.integer(movie$domgross_2013.)
+movie$intgross_2013. <- as.integer(movie$intgross_2013.)
+
+# Simple dplyr piping %>% example 
+movie %>%
+  select(year, title, code) %>%
+  group_by(year)
+
+# What percentage of all film passes and fails the Bechdel test? 
+## 44% = PASS = 803/1794 = 44.60% and 56% = FAIL = 991/1794 = 55.24% 
+table(movie %>%
+  select(clean_test, binary) %>%
+  group_by(binary) %>%
+    count()) 
+
+# What percentage of film in past decade passes and fails the Bechdel test?
+## PASS = 577/1215 = 47% and FAIL = 638/1215 = 53% 
+table(movie %>%
+        select(year, clean_test, binary) %>%
+        filter(year > "2000") %>%
+        group_by(binary) %>%
+        count())
+
+# Simple histogram showing number of films that fail and pass Bechdel test, color categorized by categorical variable 'test' 
+plot_ly(movie, x = ~binary, color = ~clean_test) %>%
+  add_histogram() 
+
+# Histograms faceted by 'test' 
+one_plot <- function(d) {
+  plot_ly(d, x = ~budget) %>%
+    add_annotations(
+      ~unique(clean_test), x = 0.5, y = 1, 
+      xref = "paper", yref = "paper", showarrow = FALSE
+    )
+}
+
+movie %>%
+  split(.$clean_test) %>%
+  lapply(one_plot) %>% 
+  subplot(nrows = 3, shareX = TRUE) %>%
+  hide_legend()
+
+# Scatterplot of budget by domestic gross 
+## Introducing text attribute 
+plot_ly(movie, x = ~budget_2013., y = ~domgross , type="scatter", mode = "markers", text = ~paste("Title: ", title, '<br>Year:', year), marker=list(size=5 , opacity=0.5), color = ~clean_test)
+
+# 3D scatterplot of budget by domestic gross by international gross 
+plot_ly(movie, x = ~budget_2013., y = ~domgross, z = ~intgross, type = "scatter3d", 
+        mode = "markers", text = ~paste("Title: ", title, '<br>Year:', year), 
+        marker=list(size=5 , opacity=0.5), color = ~clean_test)
+
+# Donut chart of movies (2008-2013) that pass and fail the Bechdel Test
+movie %>%
+  group_by(code) %>%
+  filter(year > "2007") %>%
+  summarise(count = n()) %>%
+  plot_ly(labels = ~code, values = ~count) %>%
+  add_pie(hole = 0.6) %>%
+  layout(title = "2008-2013 Film Bechdel Test Pass/Fail",  showlegend = F,
+         xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+         yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
+
+# Boxplot of Bechdel pass/fail (2009-2013) by budget 
+## Factor by code year 
+## +Select: cleantest and binary. Change: plot_ly(x = ~movie$binary, y = ~movie$budget_2013., color = ~movie$clean_test, type = "box") %>% layout(boxmode = "group")
+
+movie$code <- factor(movie$code,levels = c("2008PASS", "2008FAIL", "2009PASS", "2009FAIL", "2010PASS", "2010FAIL", "2011PASS", "2011FAIL", "2012PASS", "2012FAIL", "2013PASS", "2013FAIL"))
+
+movie %>%
+  filter(year > "2008") %>%
+  plot_ly(y = ~budget_2013., color = ~code, type = "box", colors = "Set3") 
+
+# Line graph of pass/fail budgets 
+movie %>% 
+  plot_ly(x = ~year, y = ~budget_2013.) %>% 
+  add_lines(color = ~binary) %>%
+  layout(
+    xaxis = list(title = "year"),
+    yaxis = list(title = "budget")
+  ) 
+
+# Line graph of clean_test 
+movie %>%
+  group_by(clean_test) %>%
+  transform(id = as.integer(factor(clean_test))) %>%
+  plot_ly(x = ~year, y = ~budget_2013., color = ~clean_test, colors = "Dark2", text = ~paste("Title: ", title, '<br>Year:', year)) %>%
+  add_lines() %>%
+  layout(yaxis=list(title="budget"))
+
+# Hadley Wickham's animated bubble chart using gapminder dataset 
+data(gapminder, package = "gapminder")
+gg <- ggplot(gapminder, aes(gdpPercap, lifeExp, color = continent)) +
+  geom_point(aes(size = pop, frame = year, ids = country)) +
+  scale_x_log10()
+ggplotly(gg)
+
+# More complex dylr. Use either top_n function or filter(budget_2013. == max(budget_2013.)) 
+topfive <- movie %>%
+  select(title, year, binary, clean_test, budget_2013.) %>%
+  group_by(year) %>%
+  top_n(n=5) %>%
+  filter(year > "2000") %>%
+  as.data.frame()
+
+# Creating a dataframe for the 'bottom five' (least budget) 
+btmfive <- movie %>%
+  select(title, year, binary, clean_test, budget_2013.) %>%
+  group_by(year) %>%
+  top_n(n=-5) %>%
+  filter(year > "2000") %>%
+  as.data.frame()
+
+# As seen in Wicham's gapminder example, plotly can be used to transform existing ggplot2 visualization into plotly visualizations
+top <- topfive %>%
+  ggplot(mapping = aes(x = binary, fill=clean_test, text = paste("title:", title))) +
+  geom_bar() +
+  facet_grid(. ~ year) + 
+  theme(axis.text.x = element_text(angle = 45)) +
+  scale_fill_brewer(palette="OrRd") 
+
+ggplotly(top) 
+  
+# Apply ggplotly to 'bottom five' films   
+bottom <- btmfive %>%
+  ggplot(mapping = aes(x = binary, fill=clean_test, text = paste("title:", title))) +
+  geom_bar() +
+  facet_grid(. ~ year) + 
+  theme(axis.text.x = element_text(angle = 45)) +
+  scale_fill_brewer(palette="BuGn") 
+
+ggplotly(bottom)
+
